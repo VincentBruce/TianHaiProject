@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tianhai"
+version = "0.1.0"
+description = "TianHai Java service log analysis assistant runtime foundation."
+readme = "00-master-plan-TianHai.md"
+requires-python = ">=3.12"
+dependencies = [
+    "agno>=2.5.14",
+    "aiosqlite>=0.21.0",
+    "fastapi>=0.124.0",
+    "pydantic>=2.12.0",
+    "pydantic-settings>=2.12.0",
+    "psycopg[binary]>=3.3.0",
+    "python-dotenv>=1.2.0",
+    "sqlalchemy>=2.0.45",
+    "uvicorn[standard]>=0.38.0",
+]
+
+[project.scripts]
+tianhai-agentos = "tianhai.server.app:serve"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
