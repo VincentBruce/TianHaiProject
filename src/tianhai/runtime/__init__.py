@@ -4,6 +4,7 @@ from tianhai.runtime.assembly import (
     create_agent_os,
     create_db,
     create_default_components,
+    create_default_memory_policy,
     create_runtime_assembly,
 )
 from tianhai.runtime.boundaries import (
@@ -24,6 +25,7 @@ __all__ = (
     "create_agent_os",
     "create_db",
     "create_default_components",
+    "create_default_memory_policy",
     "create_runtime_assembly",
     "get_boundary",
 )

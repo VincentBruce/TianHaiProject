@@ -47,7 +47,7 @@
 
 ### Phase 5: Memory v1
 
-- **Status:** pending
+- **Status:** completed
 - Implement TianHai memory policy on top of Agno learning and memory stores
 - Introduce store-specific write policies for service context, user preferences, and investigation patterns
 - Make memory writes inspectable and correctable

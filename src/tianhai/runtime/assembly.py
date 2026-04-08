@@ -24,6 +24,7 @@ class RuntimeComponentSet:
 class TianHaiRuntimeAssembly:
     settings: TianHaiSettings
     db: object
+    memory_policy: object | None = None
     components: RuntimeComponentSet = field(default_factory=RuntimeComponentSet)
 
 
@@ -47,10 +48,16 @@ def create_runtime_assembly(
     settings: TianHaiSettings | None = None,
     *,
     db: object | None = None,
+    memory_policy: object | None = None,
     components: RuntimeComponentSet | None = None,
 ) -> TianHaiRuntimeAssembly:
     resolved_settings = settings or TianHaiSettings()
     resolved_db = db if db is not None else create_db(resolved_settings)
+    resolved_memory_policy = (
+        memory_policy
+        if memory_policy is not None
+        else create_default_memory_policy(db=resolved_db)
+    )
     resolved_components = (
         components
         if components is not None
@@ -59,8 +66,15 @@ def create_runtime_assembly(
     return TianHaiRuntimeAssembly(
         settings=resolved_settings,
         db=resolved_db,
+        memory_policy=resolved_memory_policy,
         components=resolved_components,
     )
+
+
+def create_default_memory_policy(*, db: object) -> object:
+    from tianhai.memory import create_memory_policy
+
+    return create_memory_policy(db=db)
 
 
 def create_default_components(

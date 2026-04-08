@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from tianhai.agents import TianHaiPrimaryAgent
 from tianhai.config import DatabaseBackend, TianHaiSettings
+from tianhai.memory import TianHaiMemoryPolicy
 from tianhai.runtime import (
     RuntimeComponentSet,
     create_agent_os,
@@ -34,6 +35,7 @@ def test_runtime_assembly_registers_phase4_agent_and_workflow() -> None:
         TianHaiJavaLogAnalysisTeam,
     )
     assert assembly.components.knowledge == ()
+    assert isinstance(assembly.memory_policy, TianHaiMemoryPolicy)
 
 
 def test_runtime_assembly_accepts_explicit_empty_component_override() -> None:
