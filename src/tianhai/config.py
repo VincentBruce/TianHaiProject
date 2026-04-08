@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from dotenv import load_dotenv
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+load_dotenv()
 
 
 class DatabaseBackend(StrEnum):
@@ -34,6 +38,7 @@ class TianHaiSettings(BaseSettings):
     agentos_telemetry: bool = False
     agentos_reload: bool = False
     agentos_auto_provision_dbs: bool = True
+    primary_agent_model: str = Field(default="openai:gpt-4o", min_length=1)
 
     @field_validator("database_url", mode="before")
     @classmethod

@@ -1,3 +1,14 @@
+from tianhai.domain.diagnosis import (
+    DiagnosisConfidence,
+    DiagnosisFinding,
+    DiagnosisReport,
+    DiagnosisResponseMode,
+    LogAnalysisRequest,
+    LogEvidence,
+    WorkflowHandoffSignal,
+    WorkflowHandoffType,
+    WorkflowHandoffUrgency,
+)
 from tianhai.domain.logs import (
     JavaException,
     JavaLogBatch,
@@ -10,12 +21,21 @@ from tianhai.domain.logs import (
 )
 
 __all__ = (
+    "DiagnosisConfidence",
+    "DiagnosisFinding",
+    "DiagnosisReport",
+    "DiagnosisResponseMode",
     "JavaException",
     "JavaLogBatch",
     "JavaLogEntry",
     "JavaStackFrame",
+    "LogAnalysisRequest",
+    "LogEvidence",
     "LogPosition",
     "LogSeverity",
     "LogSource",
     "LogTimeRange",
+    "WorkflowHandoffSignal",
+    "WorkflowHandoffType",
+    "WorkflowHandoffUrgency",
 )

@@ -53,12 +53,24 @@ def create_runtime_assembly(
     return TianHaiRuntimeAssembly(
         settings=resolved_settings,
         db=db if db is not None else create_db(resolved_settings),
-        components=components or RuntimeComponentSet(),
+        components=(
+            components
+            if components is not None
+            else create_default_components(resolved_settings)
+        ),
+    )
+
+
+def create_default_components(settings: TianHaiSettings) -> RuntimeComponentSet:
+    from tianhai.agents import TianHaiPrimaryAgent
+
+    return RuntimeComponentSet(
+        agents=(TianHaiPrimaryAgent(model=settings.primary_agent_model),)
     )
 
 
 def create_agent_os(assembly: TianHaiRuntimeAssembly):
-    """Create an AgentOS instance without Phase 2+ business components."""
+    """Create an AgentOS instance for the configured runtime components."""
 
     from agno.os import AgentOS
 
