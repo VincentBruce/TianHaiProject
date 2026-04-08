@@ -32,7 +32,7 @@
 
 ### Phase 3: Incident and Workflow Layer
 
-- **Status:** pending
+- **Status:** completed
 - Define TianHai's typed incident diagnosis models
 - Implement TianHai incident records and lifecycle
 - Map long-running log investigations to Agno workflows

@@ -50,22 +50,30 @@ def create_runtime_assembly(
     components: RuntimeComponentSet | None = None,
 ) -> TianHaiRuntimeAssembly:
     resolved_settings = settings or TianHaiSettings()
+    resolved_db = db if db is not None else create_db(resolved_settings)
+    resolved_components = (
+        components
+        if components is not None
+        else create_default_components(resolved_settings, db=resolved_db)
+    )
     return TianHaiRuntimeAssembly(
         settings=resolved_settings,
-        db=db if db is not None else create_db(resolved_settings),
-        components=(
-            components
-            if components is not None
-            else create_default_components(resolved_settings)
-        ),
+        db=resolved_db,
+        components=resolved_components,
     )
 
 
-def create_default_components(settings: TianHaiSettings) -> RuntimeComponentSet:
+def create_default_components(
+    settings: TianHaiSettings,
+    *,
+    db: object | None = None,
+) -> RuntimeComponentSet:
     from tianhai.agents import TianHaiPrimaryAgent
+    from tianhai.workflows import TianHaiIncidentWorkflow
 
     return RuntimeComponentSet(
-        agents=(TianHaiPrimaryAgent(model=settings.primary_agent_model),)
+        agents=(TianHaiPrimaryAgent(model=settings.primary_agent_model),),
+        workflows=(TianHaiIncidentWorkflow(db=db),),
     )
 
 
