@@ -73,7 +73,12 @@ def create_default_components(
 
     return RuntimeComponentSet(
         agents=(TianHaiPrimaryAgent(model=settings.primary_agent_model),),
-        workflows=(TianHaiIncidentWorkflow(db=db),),
+        workflows=(
+            TianHaiIncidentWorkflow(
+                db=db,
+                java_log_team_model=settings.java_log_team_model,
+            ),
+        ),
     )
 
 

@@ -3,7 +3,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
+from agno.models.base import Model
 from agno.run.base import RunContext
+from agno.run.team import TeamRunOutput
 from agno.run.workflow import WorkflowRunOutput, WorkflowRunOutputEvent
 from agno.workflow import Step, StepInput, StepOutput, Workflow
 
@@ -18,10 +20,19 @@ from tianhai.domain import (
     WorkflowHandoffSignal,
     add_incident_continuation,
     cancel_incident,
+    complete_incident,
     create_incident_record,
+    fail_incident,
     mark_incident_awaiting_continuation,
     mark_incident_scope_recorded,
     start_incident_execution,
+)
+from tianhai.teams import (
+    DEFAULT_JAVA_LOG_ANALYSIS_TEAM_MODEL,
+    JavaLogAnalysisTeamResult,
+    TianHaiJavaLogAnalysisTeam,
+    build_java_log_analysis_team_input,
+    incident_diagnosis_result_from_team_result,
 )
 
 
@@ -29,6 +40,7 @@ INCIDENT_WORKFLOW_ID = "tianhai-incident-diagnosis-workflow"
 INCIDENT_WORKFLOW_NAME = "TianHai Incident Diagnosis Workflow"
 RECORD_EXECUTION_STEP_NAME = "record_incident_execution"
 CONTINUATION_GATE_STEP_NAME = "record_continuation_gate"
+JAVA_LOG_ANALYSIS_TEAM_STEP_NAME = "run_java_log_analysis_team"
 
 
 class TianHaiIncidentWorkflow(Workflow):
@@ -41,11 +53,19 @@ class TianHaiIncidentWorkflow(Workflow):
         session_id: str | None = None,
         user_id: str | None = None,
         debug_mode: bool = False,
+        log_analysis_team: object | None = None,
+        java_log_team_model: Model | str | None = DEFAULT_JAVA_LOG_ANALYSIS_TEAM_MODEL,
     ) -> None:
+        self.log_analysis_team = log_analysis_team or TianHaiJavaLogAnalysisTeam(
+            model=java_log_team_model,
+        )
         super().__init__(
             id=INCIDENT_WORKFLOW_ID,
             name=INCIDENT_WORKFLOW_NAME,
-            description="Records TianHai incident workflow handoffs and execution state.",
+            description=(
+                "Records TianHai incident workflow handoffs and runs bounded "
+                "Java log analysis through an internal team."
+            ),
             db=db,
             steps=[
                 Step(
@@ -58,6 +78,15 @@ class TianHaiIncidentWorkflow(Workflow):
                     name=CONTINUATION_GATE_STEP_NAME,
                     executor=record_continuation_gate,
                     description="Record whether the incident needs continuation input.",
+                    max_retries=0,
+                ),
+                Step(
+                    name=JAVA_LOG_ANALYSIS_TEAM_STEP_NAME,
+                    executor=self.run_java_log_analysis_team,
+                    description=(
+                        "Run the workflow-internal Java log analysis team when "
+                        "handoff inputs are complete."
+                    ),
                     max_retries=0,
                 ),
             ],
@@ -147,6 +176,20 @@ class TianHaiIncidentWorkflow(Workflow):
             **kwargs,
         )
 
+    def run_java_log_analysis_team(
+        self,
+        step_input: StepInput,
+        *,
+        run_context: RunContext | None = None,
+        session_state: dict[str, Any] | None = None,
+    ) -> StepOutput:
+        return execute_java_log_analysis_team_step(
+            step_input,
+            log_analysis_team=self.log_analysis_team,
+            run_context=run_context,
+            session_state=session_state,
+        )
+
 
 def record_incident_execution(
     step_input: StepInput,
@@ -211,6 +254,70 @@ def record_continuation_gate(
     )
 
 
+def execute_java_log_analysis_team_step(
+    step_input: StepInput,
+    *,
+    log_analysis_team: object,
+    run_context: RunContext | None = None,
+    session_state: dict[str, Any] | None = None,
+) -> StepOutput:
+    workflow_result = _coerce_incident_workflow_result(
+        step_input.previous_step_content,
+    )
+    incident = workflow_result.incident
+    if workflow_result.requires_continuation:
+        _write_incident_session_state(session_state, incident)
+        return StepOutput(
+            step_name=JAVA_LOG_ANALYSIS_TEAM_STEP_NAME,
+            content=workflow_result,
+            success=True,
+        )
+
+    try:
+        team_input = build_java_log_analysis_team_input(incident)
+        team_response = log_analysis_team.run(
+            input=team_input,
+            run_id=_team_run_id(run_context),
+            session_id=incident.execution.session_id,
+            user_id=run_context.user_id if run_context else None,
+        )
+        team_result = _coerce_java_log_analysis_team_result(
+            _team_response_content(team_response),
+        )
+        diagnosis_result = incident_diagnosis_result_from_team_result(team_result)
+        incident = complete_incident(incident, diagnosis_result)
+        result = IncidentWorkflowResult(
+            incident=incident,
+            summary=team_result.summary,
+            execution_state=incident.execution,
+            requires_continuation=False,
+            next_actions=team_result.recommended_actions,
+            limitations=team_result.limitations,
+        )
+    except Exception as exc:
+        incident = fail_incident(
+            incident,
+            error=f"Java log analysis team failed: {exc}",
+        )
+        result = IncidentWorkflowResult(
+            incident=incident,
+            summary="Incident workflow failed while running Java log analysis team.",
+            execution_state=incident.execution,
+            requires_continuation=False,
+            next_actions=("Inspect the team failure and retry inside the workflow.",),
+            limitations=(
+                "The Java log analysis team did not produce a valid bounded report.",
+            ),
+        )
+
+    _write_incident_session_state(session_state, incident)
+    return StepOutput(
+        step_name=JAVA_LOG_ANALYSIS_TEAM_STEP_NAME,
+        content=result,
+        success=True,
+    )
+
+
 def _coerce_workflow_request(value: object) -> IncidentWorkflowRequest:
     if isinstance(value, IncidentWorkflowRequest):
         return value
@@ -221,6 +328,32 @@ def _coerce_incident_record(value: object) -> IncidentRecord:
     if isinstance(value, IncidentRecord):
         return value
     return IncidentRecord.model_validate(value)
+
+
+def _coerce_incident_workflow_result(value: object) -> IncidentWorkflowResult:
+    if isinstance(value, IncidentWorkflowResult):
+        return value
+    return IncidentWorkflowResult.model_validate(value)
+
+
+def _coerce_java_log_analysis_team_result(
+    value: object,
+) -> JavaLogAnalysisTeamResult:
+    if isinstance(value, JavaLogAnalysisTeamResult):
+        return value
+    return JavaLogAnalysisTeamResult.model_validate(value)
+
+
+def _team_response_content(value: object) -> object:
+    if isinstance(value, TeamRunOutput):
+        return value.content
+    raise TypeError("Java log analysis team returned a streaming response")
+
+
+def _team_run_id(run_context: RunContext | None) -> str | None:
+    if run_context is None or run_context.run_id is None:
+        return None
+    return f"{run_context.run_id}-{JAVA_LOG_ANALYSIS_TEAM_STEP_NAME}"
 
 
 def _write_incident_session_state(
