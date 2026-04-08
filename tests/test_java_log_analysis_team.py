@@ -5,6 +5,8 @@ from tianhai.domain import (
     IncidentContinuationRequest,
     IncidentStatus,
     JavaLogBatch,
+    KnowledgeEvidence,
+    KnowledgeSourceType,
     LogAnalysisRequest,
     WorkflowHandoffSignal,
     add_incident_continuation,
@@ -62,7 +64,22 @@ def test_java_log_analysis_team_input_uses_only_incident_context() -> None:
         ),
     )
 
-    team_input = build_java_log_analysis_team_input(incident)
+    knowledge_evidence = (
+        KnowledgeEvidence(
+            id="kb-checkout-runbook",
+            summary="Checkout SQL timeouts can follow HikariCP saturation.",
+            source_type=KnowledgeSourceType.JAVA_SERVICE_NOTES,
+            title="Checkout runbook",
+            excerpt="Check HikariCP pool saturation before retry settings.",
+            source_uri="runbooks/checkout.md",
+            service_name="checkout",
+        ),
+    )
+
+    team_input = build_java_log_analysis_team_input(
+        incident,
+        knowledge_evidence=knowledge_evidence,
+    )
 
     assert team_input.incident_id == "inc-team-input"
     assert team_input.question == "Why is checkout failing?"
@@ -79,12 +96,22 @@ def test_java_log_analysis_team_input_uses_only_incident_context() -> None:
         "Use only supplied logs.",
         "Do not infer upstream service state.",
     )
+    assert team_input.knowledge_evidence == knowledge_evidence
 
 
 def test_team_result_maps_to_completed_incident_diagnosis_result() -> None:
+    knowledge_evidence = (
+        KnowledgeEvidence(
+            id="kb-known-issue-sql-timeout",
+            summary="Known issue for SQL timeout triage.",
+            source_type=KnowledgeSourceType.KNOWN_ISSUES,
+            title="SQL timeout known issue",
+        ),
+    )
     diagnosis_result = incident_diagnosis_result_from_team_result(
         JavaLogAnalysisTeamResult(
             summary="The supplied logs point to a database lock timeout.",
+            knowledge_evidence=knowledge_evidence,
             recommended_actions=("Inspect database lock contention.",),
             limitations=("Only supplied incident logs were used.",),
         )
@@ -94,4 +121,5 @@ def test_team_result_maps_to_completed_incident_diagnosis_result() -> None:
     assert diagnosis_result.summary == (
         "The supplied logs point to a database lock timeout."
     )
+    assert diagnosis_result.knowledge_evidence == knowledge_evidence
     assert diagnosis_result.requires_continuation is False

@@ -12,6 +12,7 @@ from tianhai.domain import (
     IncidentRecord,
     IncidentStatus,
     JavaLogBatch,
+    KnowledgeEvidence,
     LogEvidence,
 )
 from tianhai.domain.logs import TianHaiDomainModel
@@ -37,6 +38,7 @@ class JavaLogAnalysisTeamInput(TianHaiDomainModel):
     continuation_log_batches: tuple[JavaLogBatch, ...] = ()
     continuation_notes: tuple[str, ...] = ()
     resolved_missing_inputs: tuple[str, ...] = ()
+    knowledge_evidence: tuple[KnowledgeEvidence, ...] = ()
     workflow_run_id: str | None = None
     workflow_session_id: str | None = None
 
@@ -45,6 +47,7 @@ class JavaLogAnalysisTeamResult(TianHaiDomainModel):
     summary: str = Field(min_length=1)
     findings: tuple[DiagnosisFinding, ...] = ()
     evidence: tuple[LogEvidence, ...] = ()
+    knowledge_evidence: tuple[KnowledgeEvidence, ...] = ()
     recommended_actions: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
 
@@ -55,9 +58,12 @@ JAVA_LOG_ANALYSIS_TEAM_INSTRUCTIONS: tuple[str, ...] = (
     "Use only JavaLogAnalysisTeamInput fields as evidence: the current "
     "request log batch, incident handoff reason, continuation log batches, "
     "continuation notes, resolved missing inputs, constraints, service "
-    "context, and workflow identifiers.",
-    "Do not use memory, knowledge retrieval, RAG, external search, filesystem "
-    "lookup, network calls, control-plane actions, or client APIs.",
+    "context, workflow identifiers, and workflow-supplied knowledge_evidence.",
+    "Treat knowledge_evidence as durable runbook or documentation context, not "
+    "as user memory or log evidence.",
+    "Do not use memory, perform additional knowledge retrieval, run RAG, call "
+    "external search, use filesystem lookup, network calls, control-plane "
+    "actions, or client APIs.",
     "Coordinate member work for log parsing, Java error analysis, evidence "
     "gathering, and final report synthesis.",
     "Create LogEvidence entries only from supplied logs or structured context. "
@@ -69,6 +75,8 @@ JAVA_LOG_ANALYSIS_TEAM_INSTRUCTIONS: tuple[str, ...] = (
 
 def build_java_log_analysis_team_input(
     incident: IncidentRecord,
+    *,
+    knowledge_evidence: tuple[KnowledgeEvidence, ...] = (),
 ) -> JavaLogAnalysisTeamInput:
     continuation_log_batches = tuple(
         continuation.additional_log_batch
@@ -102,6 +110,7 @@ def build_java_log_analysis_team_input(
         continuation_log_batches=continuation_log_batches,
         continuation_notes=continuation_notes,
         resolved_missing_inputs=resolved_missing_inputs,
+        knowledge_evidence=knowledge_evidence,
         workflow_run_id=incident.execution.run_id,
         workflow_session_id=incident.execution.session_id,
     )
@@ -115,6 +124,7 @@ def incident_diagnosis_result_from_team_result(
         status=IncidentStatus.COMPLETED,
         findings=team_result.findings,
         evidence=team_result.evidence,
+        knowledge_evidence=team_result.knowledge_evidence,
         recommended_actions=team_result.recommended_actions,
         limitations=team_result.limitations,
         requires_continuation=False,
@@ -209,7 +219,7 @@ def _team_member(*, agent_id: str, name: str, role: str) -> Agent:
         role=role,
         instructions=[
             "Stay inside the JavaLogAnalysisTeamInput evidence boundary.",
-            "Do not use tools, memory, knowledge retrieval, RAG, search, "
+            "Do not use tools, memory, additional knowledge retrieval, RAG, search, "
             "filesystem lookup, network calls, control-plane actions, or "
             "client APIs.",
             "If the provided logs and context are insufficient, state the "

@@ -40,6 +40,7 @@ class TianHaiSettings(BaseSettings):
     agentos_auto_provision_dbs: bool = True
     primary_agent_model: str = Field(default="openai:gpt-4o", min_length=1)
     java_log_team_model: str = Field(default="openai:gpt-4o", min_length=1)
+    knowledge_max_results: int = Field(default=5, ge=1, le=20)
 
     @field_validator("database_url", mode="before")
     @classmethod

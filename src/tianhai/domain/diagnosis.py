@@ -25,6 +25,12 @@ class DiagnosisConfidence(StrEnum):
     UNKNOWN = "unknown"
 
 
+class KnowledgeSourceType(StrEnum):
+    JAVA_SERVICE_NOTES = "java_service_notes"
+    KNOWN_ISSUES = "known_issues"
+    AGNO_DOCUMENTATION = "agno_documentation"
+
+
 class WorkflowHandoffUrgency(StrEnum):
     NORMAL = "normal"
     HIGH = "high"
@@ -52,6 +58,20 @@ class LogEvidence(TianHaiDomainModel):
     position: LogPosition | None = None
 
 
+class KnowledgeEvidence(TianHaiDomainModel):
+    id: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    source_type: KnowledgeSourceType
+    title: str = Field(min_length=1)
+    excerpt: str | None = None
+    source_uri: str | None = None
+    document_id: str | None = None
+    service_name: str | None = None
+    environment: str | None = None
+    score: float | None = Field(default=None, ge=0)
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
 class DiagnosisFinding(TianHaiDomainModel):
     title: str = Field(min_length=1)
     detail: str = Field(min_length=1)
@@ -75,6 +95,7 @@ class DiagnosisReport(TianHaiDomainModel):
     confidence: DiagnosisConfidence = DiagnosisConfidence.UNKNOWN
     findings: tuple[DiagnosisFinding, ...] = ()
     evidence: tuple[LogEvidence, ...] = ()
+    knowledge_evidence: tuple[KnowledgeEvidence, ...] = ()
     recommended_actions: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
     workflow_handoff: WorkflowHandoffSignal | None = None

@@ -8,6 +8,7 @@ from pydantic import Field, model_validator
 
 from tianhai.domain.diagnosis import (
     DiagnosisFinding,
+    KnowledgeEvidence,
     LogAnalysisRequest,
     LogEvidence,
     WorkflowHandoffSignal,
@@ -132,6 +133,7 @@ class IncidentDiagnosisResult(TianHaiDomainModel):
     status: IncidentStatus
     findings: tuple[DiagnosisFinding, ...] = ()
     evidence: tuple[LogEvidence, ...] = ()
+    knowledge_evidence: tuple[KnowledgeEvidence, ...] = ()
     recommended_actions: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
     requires_continuation: bool = False

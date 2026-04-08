@@ -10,6 +10,8 @@ from tianhai.domain import (
     IncidentWorkflowRequest,
     IncidentWorkflowResult,
     JavaLogBatch,
+    KnowledgeEvidence,
+    KnowledgeSourceType,
     LogAnalysisRequest,
     LogEvidence,
     LogSeverity,
@@ -37,7 +39,11 @@ def test_incident_workflow_uses_agno_workflow_contract() -> None:
 
 def test_incident_workflow_run_records_execution_state() -> None:
     log_analysis_team = FakeLogAnalysisTeam()
-    workflow = TianHaiIncidentWorkflow(log_analysis_team=log_analysis_team)
+    knowledge_base = FakeKnowledgeBase()
+    workflow = TianHaiIncidentWorkflow(
+        log_analysis_team=log_analysis_team,
+        knowledge_base=knowledge_base,
+    )
     incident = workflow.create_incident(
         request=_request(),
         handoff=WorkflowHandoffSignal(reason="Needs durable investigation."),
@@ -61,8 +67,13 @@ def test_incident_workflow_run_records_execution_state() -> None:
     assert response.content.incident.diagnosis_result.findings[0].evidence_ids == (
         "ev-timeout",
     )
+    assert response.content.incident.diagnosis_result.knowledge_evidence == (
+        _knowledge_evidence(),
+    )
     assert log_analysis_team.inputs[0].incident_id == "inc-run"
     assert log_analysis_team.inputs[0].workflow_run_id == "run-inc-run"
+    assert log_analysis_team.inputs[0].knowledge_evidence == (_knowledge_evidence(),)
+    assert knowledge_base.max_results == [5]
 
 
 def test_incident_workflow_records_missing_inputs_as_awaiting_continuation() -> None:
@@ -180,7 +191,41 @@ class FakeLogAnalysisTeam:
                         severity=LogSeverity.ERROR,
                     ),
                 ),
+                knowledge_evidence=input.knowledge_evidence,
                 recommended_actions=("Inspect database latency and pool usage.",),
                 limitations=("Only current incident logs were used.",),
             )
         )
+
+
+class FakeKnowledgeBase:
+    def __init__(self) -> None:
+        self.max_results: list[int] = []
+
+    def retrieve_for_log_analysis(
+        self,
+        request: LogAnalysisRequest,
+        *,
+        max_results: int,
+    ) -> object:
+        self.max_results.append(max_results)
+        assert request.question == "Why is checkout failing?"
+        return FakeKnowledgeRetrievalResult()
+
+
+class FakeKnowledgeRetrievalResult:
+    @property
+    def evidence(self) -> tuple[KnowledgeEvidence, ...]:
+        return (_knowledge_evidence(),)
+
+
+def _knowledge_evidence() -> KnowledgeEvidence:
+    return KnowledgeEvidence(
+        id="kb-checkout-runbook",
+        summary="Checkout SQL timeouts can follow HikariCP saturation.",
+        source_type=KnowledgeSourceType.JAVA_SERVICE_NOTES,
+        title="Checkout runbook",
+        excerpt="Check HikariCP pool saturation before retry settings.",
+        source_uri="runbooks/checkout.md",
+        service_name="checkout",
+    )

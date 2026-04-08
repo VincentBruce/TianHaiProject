@@ -16,6 +16,7 @@ from tianhai.domain import (
     IncidentStatus,
     IncidentWorkflowRequest,
     IncidentWorkflowResult,
+    KnowledgeEvidence,
     LogAnalysisRequest,
     WorkflowHandoffSignal,
     add_incident_continuation,
@@ -27,6 +28,7 @@ from tianhai.domain import (
     mark_incident_scope_recorded,
     start_incident_execution,
 )
+from tianhai.knowledge import DEFAULT_KNOWLEDGE_MAX_RESULTS, create_knowledge_base
 from tianhai.teams import (
     DEFAULT_JAVA_LOG_ANALYSIS_TEAM_MODEL,
     JavaLogAnalysisTeamResult,
@@ -54,17 +56,26 @@ class TianHaiIncidentWorkflow(Workflow):
         user_id: str | None = None,
         debug_mode: bool = False,
         log_analysis_team: object | None = None,
+        knowledge_base: object | None = None,
+        knowledge_max_results: int = DEFAULT_KNOWLEDGE_MAX_RESULTS,
         java_log_team_model: Model | str | None = DEFAULT_JAVA_LOG_ANALYSIS_TEAM_MODEL,
     ) -> None:
         self.log_analysis_team = log_analysis_team or TianHaiJavaLogAnalysisTeam(
             model=java_log_team_model,
         )
+        self.knowledge_base = (
+            knowledge_base
+            if knowledge_base is not None or db is None
+            else create_knowledge_base(db=db, max_results=knowledge_max_results)
+        )
+        self.knowledge_max_results = knowledge_max_results
         super().__init__(
             id=INCIDENT_WORKFLOW_ID,
             name=INCIDENT_WORKFLOW_NAME,
             description=(
                 "Records TianHai incident workflow handoffs and runs bounded "
-                "Java log analysis through an internal team."
+                "Java log analysis through an internal team with durable "
+                "knowledge evidence."
             ),
             db=db,
             steps=[
@@ -186,6 +197,8 @@ class TianHaiIncidentWorkflow(Workflow):
         return execute_java_log_analysis_team_step(
             step_input,
             log_analysis_team=self.log_analysis_team,
+            knowledge_base=self.knowledge_base,
+            knowledge_max_results=self.knowledge_max_results,
             run_context=run_context,
             session_state=session_state,
         )
@@ -258,6 +271,8 @@ def execute_java_log_analysis_team_step(
     step_input: StepInput,
     *,
     log_analysis_team: object,
+    knowledge_base: object | None = None,
+    knowledge_max_results: int = DEFAULT_KNOWLEDGE_MAX_RESULTS,
     run_context: RunContext | None = None,
     session_state: dict[str, Any] | None = None,
 ) -> StepOutput:
@@ -274,7 +289,15 @@ def execute_java_log_analysis_team_step(
         )
 
     try:
-        team_input = build_java_log_analysis_team_input(incident)
+        knowledge_evidence = _retrieve_incident_knowledge_evidence(
+            incident,
+            knowledge_base=knowledge_base,
+            max_results=knowledge_max_results,
+        )
+        team_input = build_java_log_analysis_team_input(
+            incident,
+            knowledge_evidence=knowledge_evidence,
+        )
         team_response = log_analysis_team.run(
             input=team_input,
             run_id=_team_run_id(run_context),
@@ -354,6 +377,24 @@ def _team_run_id(run_context: RunContext | None) -> str | None:
     if run_context is None or run_context.run_id is None:
         return None
     return f"{run_context.run_id}-{JAVA_LOG_ANALYSIS_TEAM_STEP_NAME}"
+
+
+def _retrieve_incident_knowledge_evidence(
+    incident: IncidentRecord,
+    *,
+    knowledge_base: object | None,
+    max_results: int,
+) -> tuple[KnowledgeEvidence, ...]:
+    if knowledge_base is None or not hasattr(
+        knowledge_base,
+        "retrieve_for_log_analysis",
+    ):
+        return ()
+    retrieval_result = knowledge_base.retrieve_for_log_analysis(
+        incident.request,
+        max_results=max_results,
+    )
+    return tuple(getattr(retrieval_result, "evidence", ()))
 
 
 def _write_incident_session_state(

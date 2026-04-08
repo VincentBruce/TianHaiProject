@@ -54,7 +54,7 @@
 
 ### Phase 6: Knowledge and Evidence Baseline
 
-- **Status:** pending
+- **Status:** completed
 - Separate durable runbook and documentation retrieval from user memory
 - Add knowledge retrieval for Java service notes, known issues, and Agno documentation
 - Support evidence-aware outputs for log-analysis tasks

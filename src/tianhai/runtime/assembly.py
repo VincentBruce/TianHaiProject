@@ -25,6 +25,7 @@ class TianHaiRuntimeAssembly:
     settings: TianHaiSettings
     db: object
     memory_policy: object | None = None
+    knowledge_base: object | None = None
     components: RuntimeComponentSet = field(default_factory=RuntimeComponentSet)
 
 
@@ -39,8 +40,18 @@ def create_db(settings: TianHaiSettings) -> object:
     from agno.db.sqlite import SqliteDb
 
     db_file = settings.sqlite_db_file
-    if db_file != ":memory:":
-        Path(db_file).expanduser().parent.mkdir(parents=True, exist_ok=True)
+    if db_file == ":memory:":
+        from sqlalchemy import create_engine
+        from sqlalchemy.pool import StaticPool
+
+        return SqliteDb(
+            db_engine=create_engine(
+                "sqlite://",
+                connect_args={"check_same_thread": False},
+                poolclass=StaticPool,
+            )
+        )
+    Path(db_file).expanduser().parent.mkdir(parents=True, exist_ok=True)
     return SqliteDb(db_file=db_file)
 
 
@@ -49,6 +60,7 @@ def create_runtime_assembly(
     *,
     db: object | None = None,
     memory_policy: object | None = None,
+    knowledge_base: object | None = None,
     components: RuntimeComponentSet | None = None,
 ) -> TianHaiRuntimeAssembly:
     resolved_settings = settings or TianHaiSettings()
@@ -58,15 +70,28 @@ def create_runtime_assembly(
         if memory_policy is not None
         else create_default_memory_policy(db=resolved_db)
     )
+    resolved_knowledge_base = (
+        knowledge_base
+        if knowledge_base is not None
+        else create_default_knowledge_base(
+            db=resolved_db,
+            max_results=resolved_settings.knowledge_max_results,
+        )
+    )
     resolved_components = (
         components
         if components is not None
-        else create_default_components(resolved_settings, db=resolved_db)
+        else create_default_components(
+            resolved_settings,
+            db=resolved_db,
+            knowledge_base=resolved_knowledge_base,
+        )
     )
     return TianHaiRuntimeAssembly(
         settings=resolved_settings,
         db=resolved_db,
         memory_policy=resolved_memory_policy,
+        knowledge_base=resolved_knowledge_base,
         components=resolved_components,
     )
 
@@ -77,10 +102,21 @@ def create_default_memory_policy(*, db: object) -> object:
     return create_memory_policy(db=db)
 
 
+def create_default_knowledge_base(
+    *,
+    db: object,
+    max_results: int,
+) -> object:
+    from tianhai.knowledge import create_knowledge_base
+
+    return create_knowledge_base(db=db, max_results=max_results)
+
+
 def create_default_components(
     settings: TianHaiSettings,
     *,
     db: object | None = None,
+    knowledge_base: object | None = None,
 ) -> RuntimeComponentSet:
     from tianhai.agents import TianHaiPrimaryAgent
     from tianhai.workflows import TianHaiIncidentWorkflow
@@ -91,9 +127,19 @@ def create_default_components(
             TianHaiIncidentWorkflow(
                 db=db,
                 java_log_team_model=settings.java_log_team_model,
+                knowledge_base=knowledge_base,
+                knowledge_max_results=settings.knowledge_max_results,
             ),
         ),
+        knowledge=_knowledge_components(knowledge_base),
     )
+
+
+def _knowledge_components(knowledge_base: object | None) -> tuple[object, ...]:
+    if knowledge_base is None:
+        return ()
+    agno_knowledge = getattr(knowledge_base, "knowledge", knowledge_base)
+    return (agno_knowledge,)
 
 
 def create_agent_os(assembly: TianHaiRuntimeAssembly):
