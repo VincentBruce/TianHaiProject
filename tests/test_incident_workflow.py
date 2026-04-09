@@ -1,3 +1,6 @@
+import threading
+import time
+
 from agno.run.team import TeamRunOutput
 from agno.run.workflow import WorkflowRunOutput
 from agno.workflow import Workflow
@@ -20,6 +23,7 @@ from tianhai.domain import (
 from tianhai.teams import JavaLogAnalysisTeamInput, JavaLogAnalysisTeamResult
 from tianhai.workflows import (
     INCIDENT_WORKFLOW_ID,
+    HIGH_RISK_APPROVAL_STEP_NAME,
     JAVA_LOG_ANALYSIS_TEAM_STEP_NAME,
     TianHaiIncidentWorkflow,
 )
@@ -31,10 +35,11 @@ def test_incident_workflow_uses_agno_workflow_contract() -> None:
     assert isinstance(workflow, Workflow)
     assert workflow.id == INCIDENT_WORKFLOW_ID
     assert workflow.input_schema is IncidentWorkflowRequest
-    assert len(workflow.steps) == 3
+    assert len(workflow.steps) == 4
+    assert workflow.steps[2].name == HIGH_RISK_APPROVAL_STEP_NAME
     assert workflow.steps[-1].name == JAVA_LOG_ANALYSIS_TEAM_STEP_NAME
-    assert all(step.agent is None for step in workflow.steps)
-    assert all(step.team is None for step in workflow.steps)
+    assert all(getattr(step, "agent", None) is None for step in workflow.steps)
+    assert all(getattr(step, "team", None) is None for step in workflow.steps)
 
 
 def test_incident_workflow_run_records_execution_state() -> None:
@@ -155,10 +160,122 @@ def test_incident_workflow_cancel_marks_record_without_client_api() -> None:
     assert cancelled.events[-1].details["workflow_cancelled"] == "False"
 
 
-def _request() -> LogAnalysisRequest:
+def test_incident_workflow_pauses_high_risk_investigation_for_approval() -> None:
+    log_analysis_team = FakeLogAnalysisTeam()
+    workflow = TianHaiIncidentWorkflow(log_analysis_team=log_analysis_team)
+    incident = workflow.create_incident(
+        request=_request(),
+        handoff=WorkflowHandoffSignal(
+            reason="Critical incident needs bounded but operator-approved investigation.",
+            urgency="critical",
+        ),
+        incident_id="inc-high-risk",
+    )
+
+    response = workflow.run_incident(
+        incident,
+        run_id="run-inc-high-risk",
+        session_id="session-inc-high-risk",
+    )
+
+    assert isinstance(response, WorkflowRunOutput)
+    assert response.is_paused is True
+    assert response.paused_step_name == HIGH_RISK_APPROVAL_STEP_NAME
+    assert response.steps_requiring_confirmation[0].step_name == HIGH_RISK_APPROVAL_STEP_NAME
+    assert log_analysis_team.inputs == []
+
+
+def test_incident_workflow_concurrent_high_and_low_risk_runs_do_not_pollute_approval_gate() -> None:
+    barrier = threading.Barrier(2)
+    log_analysis_team = FakeLogAnalysisTeam()
+    workflow = TianHaiIncidentWorkflow(
+        log_analysis_team=log_analysis_team,
+        knowledge_base=FakeKnowledgeBase(),
+    )
+    original_executor = workflow.steps[0].active_executor
+
+    def barriered_record_incident_execution(
+        step_input,
+        *,
+        run_context=None,
+        session_state=None,
+    ):
+        result = original_executor(
+            step_input,
+            run_context=run_context,
+            session_state=session_state,
+        )
+        barrier.wait(timeout=2)
+        return result
+
+    workflow.steps[0].executor = barriered_record_incident_execution
+    workflow.steps[0].active_executor = barriered_record_incident_execution
+
+    high_risk_incident = workflow.create_incident(
+        request=_request(constraints=("production",)),
+        handoff=WorkflowHandoffSignal(
+            reason="Critical incident requires approval before deeper investigation.",
+            urgency="critical",
+        ),
+        incident_id="inc-concurrent-high",
+    )
+    low_risk_incident = workflow.create_incident(
+        request=_request(),
+        handoff=WorkflowHandoffSignal(
+            reason="Bounded investigation without approval requirement.",
+        ),
+        incident_id="inc-concurrent-low",
+    )
+
+    results: dict[str, WorkflowRunOutput] = {}
+    failures: list[BaseException] = []
+
+    def run_named(name: str, incident) -> None:
+        try:
+            results[name] = workflow.run_incident(
+                incident,
+                run_id=f"run-{name}",
+                session_id=f"session-{name}",
+            )
+        except BaseException as exc:  # pragma: no cover - test failure path
+            failures.append(exc)
+
+    high_thread = threading.Thread(
+        target=run_named,
+        args=("high", high_risk_incident),
+    )
+    low_thread = threading.Thread(
+        target=run_named,
+        args=("low", low_risk_incident),
+    )
+
+    high_thread.start()
+    time.sleep(0.05)
+    low_thread.start()
+    high_thread.join(timeout=2)
+    low_thread.join(timeout=2)
+
+    assert failures == []
+    assert high_thread.is_alive() is False
+    assert low_thread.is_alive() is False
+    assert results["high"].is_paused is True
+    assert results["high"].paused_step_name == HIGH_RISK_APPROVAL_STEP_NAME
+    assert results["low"].is_paused is False
+    assert isinstance(results["low"].content, IncidentWorkflowResult)
+    assert results["low"].content.incident.status == IncidentStatus.COMPLETED
+    assert [entry.incident_id for entry in log_analysis_team.inputs] == [
+        "inc-concurrent-low",
+    ]
+
+
+def _request(
+    *,
+    constraints: tuple[str, ...] = (),
+) -> LogAnalysisRequest:
     return LogAnalysisRequest(
         question="Why is checkout failing?",
         log_batch=JavaLogBatch(raw_excerpt="ERROR java.sql.SQLTimeoutException"),
+        constraints=constraints,
     )
 
 

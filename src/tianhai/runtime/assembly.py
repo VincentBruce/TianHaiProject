@@ -26,6 +26,7 @@ class TianHaiRuntimeAssembly:
     db: object
     memory_policy: object | None = None
     knowledge_base: object | None = None
+    incident_control_plane: object | None = None
     components: RuntimeComponentSet = field(default_factory=RuntimeComponentSet)
 
 
@@ -61,6 +62,7 @@ def create_runtime_assembly(
     db: object | None = None,
     memory_policy: object | None = None,
     knowledge_base: object | None = None,
+    incident_control_plane: object | None = None,
     components: RuntimeComponentSet | None = None,
 ) -> TianHaiRuntimeAssembly:
     resolved_settings = settings or TianHaiSettings()
@@ -87,11 +89,17 @@ def create_runtime_assembly(
             knowledge_base=resolved_knowledge_base,
         )
     )
+    resolved_incident_control_plane = (
+        incident_control_plane
+        if incident_control_plane is not None
+        else create_default_control_plane(components=resolved_components)
+    )
     return TianHaiRuntimeAssembly(
         settings=resolved_settings,
         db=resolved_db,
         memory_policy=resolved_memory_policy,
         knowledge_base=resolved_knowledge_base,
+        incident_control_plane=resolved_incident_control_plane,
         components=resolved_components,
     )
 
@@ -133,6 +141,26 @@ def create_default_components(
         ),
         knowledge=_knowledge_components(knowledge_base),
     )
+
+
+def create_default_control_plane(
+    *,
+    components: RuntimeComponentSet,
+) -> object | None:
+    from tianhai.control import TianHaiIncidentControlPlane
+    from tianhai.workflows import TianHaiIncidentWorkflow
+
+    workflow = next(
+        (
+            item
+            for item in components.workflows
+            if isinstance(item, TianHaiIncidentWorkflow)
+        ),
+        None,
+    )
+    if workflow is None:
+        return None
+    return TianHaiIncidentControlPlane(workflow=workflow)
 
 
 def _knowledge_components(knowledge_base: object | None) -> tuple[object, ...]:

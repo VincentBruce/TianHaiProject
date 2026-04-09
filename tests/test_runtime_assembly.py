@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from tianhai.agents import TianHaiPrimaryAgent
 from tianhai.config import DatabaseBackend, TianHaiSettings
+from tianhai.control import TianHaiIncidentControlPlane
 from tianhai.knowledge import TianHaiKnowledgeBase
 from tianhai.memory import TianHaiMemoryPolicy
 from tianhai.runtime import (
@@ -55,6 +56,8 @@ def test_runtime_assembly_registers_phase6_agent_workflow_and_knowledge() -> Non
         assembly.components.workflows[0].log_analysis_team,
         TianHaiJavaLogAnalysisTeam,
     )
+    assert isinstance(assembly.incident_control_plane, TianHaiIncidentControlPlane)
+    assert assembly.incident_control_plane.workflow is assembly.components.workflows[0]
     assert isinstance(assembly.knowledge_base, TianHaiKnowledgeBase)
     assert assembly.components.workflows[0].knowledge_base is assembly.knowledge_base
     assert assembly.components.knowledge == (assembly.knowledge_base.knowledge,)
@@ -67,6 +70,7 @@ def test_runtime_assembly_accepts_explicit_empty_component_override() -> None:
     assembly = create_runtime_assembly(settings, components=RuntimeComponentSet())
 
     assert assembly.components.is_business_empty()
+    assert assembly.incident_control_plane is None
 
 
 def test_agentos_app_builds_with_phase6_runtime() -> None:

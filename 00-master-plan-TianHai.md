@@ -61,14 +61,14 @@
 
 ### Phase 7: Control Plane
 
-- **Status:** pending
+- **Status:** completed
 - Add approval, pause, continue, and cancellation control surfaces
 - Map high-risk investigation steps to Agno HITL-friendly patterns
 - Define internal incident control capabilities for later API exposure
 
 ### Phase 8: API Surface Governance
 
-- **Status:** pending
+- **Status:** completed
 - Define the boundary between TianHai APIs, realtime streaming, and raw AgentOS surfaces
 - Keep /tianhai/* as the product contract and AgentOS auto surfaces as ops and development interfaces
 - Document where future HTTP and streaming features should be added

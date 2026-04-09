@@ -5,11 +5,12 @@ from tianhai.runtime import (
     create_agent_os,
     create_runtime_assembly,
 )
+from tianhai.server.governance import apply_api_surface_governance
 
 
 runtime: TianHaiRuntimeAssembly = create_runtime_assembly()
 agent_os = create_agent_os(runtime)
-app = agent_os.get_app()
+app = apply_api_surface_governance(agent_os.get_app())
 
 
 def serve() -> None:
