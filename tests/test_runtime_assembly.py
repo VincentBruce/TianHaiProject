@@ -8,7 +8,9 @@ from tianhai.control import TianHaiIncidentControlPlane
 from tianhai.knowledge import TianHaiKnowledgeBase
 from tianhai.memory import TianHaiMemoryPolicy
 from tianhai.runtime import (
+    DEFAULT_INVESTIGATION_ROUTING_POLICY,
     RuntimeComponentSet,
+    TianHaiInvestigationRouter,
     create_agent_os,
     create_db,
     create_runtime_assembly,
@@ -61,6 +63,12 @@ def test_runtime_assembly_registers_phase6_agent_workflow_and_knowledge() -> Non
     assert isinstance(assembly.knowledge_base, TianHaiKnowledgeBase)
     assert assembly.components.workflows[0].knowledge_base is assembly.knowledge_base
     assert assembly.components.knowledge == (assembly.knowledge_base.knowledge,)
+    assert (
+        assembly.investigation_routing_policy
+        is DEFAULT_INVESTIGATION_ROUTING_POLICY
+    )
+    assert isinstance(assembly.investigation_router, TianHaiInvestigationRouter)
+    assert assembly.investigation_router.knowledge_base is assembly.knowledge_base
     assert isinstance(assembly.memory_policy, TianHaiMemoryPolicy)
 
 
@@ -87,3 +95,9 @@ def test_server_build_app_accepts_explicit_settings() -> None:
     app = build_app(TianHaiSettings(sqlite_db_file=":memory:"))
 
     assert isinstance(app, FastAPI)
+    assert app.state.tianhai_runtime_assembly.settings.sqlite_db_file == ":memory:"
+    assert (
+        app.state.tianhai_investigation_routing_policy
+        is DEFAULT_INVESTIGATION_ROUTING_POLICY
+    )
+    assert isinstance(app.state.tianhai_investigation_router, TianHaiInvestigationRouter)

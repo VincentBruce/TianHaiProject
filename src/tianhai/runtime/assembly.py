@@ -5,6 +5,11 @@ from pathlib import Path
 
 from tianhai import __version__
 from tianhai.config import DatabaseBackend, TianHaiSettings
+from tianhai.runtime.routing import (
+    DEFAULT_INVESTIGATION_ROUTING_POLICY,
+    TianHaiInvestigationRouter,
+    TianHaiInvestigationRoutingPolicy,
+)
 
 
 @dataclass(frozen=True)
@@ -26,6 +31,10 @@ class TianHaiRuntimeAssembly:
     db: object
     memory_policy: object | None = None
     knowledge_base: object | None = None
+    investigation_routing_policy: TianHaiInvestigationRoutingPolicy = (
+        DEFAULT_INVESTIGATION_ROUTING_POLICY
+    )
+    investigation_router: TianHaiInvestigationRouter | None = None
     incident_control_plane: object | None = None
     components: RuntimeComponentSet = field(default_factory=RuntimeComponentSet)
 
@@ -62,6 +71,10 @@ def create_runtime_assembly(
     db: object | None = None,
     memory_policy: object | None = None,
     knowledge_base: object | None = None,
+    investigation_routing_policy: TianHaiInvestigationRoutingPolicy = (
+        DEFAULT_INVESTIGATION_ROUTING_POLICY
+    ),
+    investigation_router: TianHaiInvestigationRouter | None = None,
     incident_control_plane: object | None = None,
     components: RuntimeComponentSet | None = None,
 ) -> TianHaiRuntimeAssembly:
@@ -78,6 +91,15 @@ def create_runtime_assembly(
         else create_default_knowledge_base(
             db=resolved_db,
             max_results=resolved_settings.knowledge_max_results,
+        )
+    )
+    resolved_investigation_router = (
+        investigation_router
+        if investigation_router is not None
+        else create_default_investigation_router(
+            knowledge_base=resolved_knowledge_base,
+            knowledge_max_results=resolved_settings.knowledge_max_results,
+            routing_policy=investigation_routing_policy,
         )
     )
     resolved_components = (
@@ -99,6 +121,8 @@ def create_runtime_assembly(
         db=resolved_db,
         memory_policy=resolved_memory_policy,
         knowledge_base=resolved_knowledge_base,
+        investigation_routing_policy=investigation_routing_policy,
+        investigation_router=resolved_investigation_router,
         incident_control_plane=resolved_incident_control_plane,
         components=resolved_components,
     )
@@ -118,6 +142,19 @@ def create_default_knowledge_base(
     from tianhai.knowledge import create_knowledge_base
 
     return create_knowledge_base(db=db, max_results=max_results)
+
+
+def create_default_investigation_router(
+    *,
+    knowledge_base: object | None,
+    knowledge_max_results: int,
+    routing_policy: TianHaiInvestigationRoutingPolicy,
+) -> TianHaiInvestigationRouter:
+    return TianHaiInvestigationRouter(
+        knowledge_base=knowledge_base,
+        knowledge_max_results=knowledge_max_results,
+        routing_policy=routing_policy,
+    )
 
 
 def create_default_components(

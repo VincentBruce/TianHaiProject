@@ -170,9 +170,10 @@ class TianHaiIncidentWorkflow(Workflow):
             id=INCIDENT_WORKFLOW_ID,
             name=INCIDENT_WORKFLOW_NAME,
             description=(
-                "Records TianHai incident workflow handoffs and runs bounded "
-                "Java log analysis through an internal team with durable "
-                "knowledge evidence."
+                "Records TianHai durable incident workflow handoffs and runs "
+                "bounded Java log analysis through an internal team with "
+                "durable knowledge evidence, separate from the non-durable "
+                "knowledge-assisted response branch."
             ),
             db=db,
             steps=[
@@ -637,6 +638,7 @@ def _limitations(
 ) -> tuple[str, ...]:
     limitations = (
         "This workflow records incident lifecycle and execution state only.",
+        "RAG-assisted answers are handled on a separate non-durable routing branch.",
         "No client API or streaming surface is invoked.",
     )
     if requires_approval:

@@ -18,6 +18,12 @@ class DiagnosisResponseMode(StrEnum):
     WORKFLOW_HANDOFF = "workflow_handoff"
 
 
+class InvestigationRoute(StrEnum):
+    IMMEDIATE_RESPONSE = "immediate_response"
+    KNOWLEDGE_ASSISTED_RESPONSE = "knowledge_assisted_response"
+    DURABLE_INCIDENT_INVESTIGATION = "durable_incident_investigation"
+
+
 class DiagnosisConfidence(StrEnum):
     LOW = "low"
     MEDIUM = "medium"

@@ -75,7 +75,7 @@
 
 ### Phase 9: Explicit Investigation Routing
 
-- **Status:** pending
+- **Status:** completed
 - Define routing between immediate response, knowledge-assisted response, and durable incident investigation
 - Keep RAG-assisted answers and durable incident investigation as distinct orchestration branches
 - Set routing semantics before client contract finalization
